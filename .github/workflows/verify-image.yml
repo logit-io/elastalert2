@@ -1,0 +1,30 @@
+name: Verify image build
+
+# Replaces Docker Hub Autobuilds pull request builds. Autobuilds are retired
+# on 1 April 2027:
+# https://docs.docker.com/docker-hub/repos/manage/builds/migrate/
+# This builds the image and does not push it.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Named verify-image so it doesn't clash with the upstream master_build_test `build` check.
+  verify-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+

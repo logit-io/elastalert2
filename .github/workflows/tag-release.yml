@@ -1,0 +1,59 @@
+name: Tag release
+
+# Cuts a release from the head of master: creates the git tag, starts
+# publish-tag.yml for it, then creates the GitHub Release. A tag pushed with
+# GITHUB_TOKEN does not start other workflows, so the publish is dispatched
+# explicitly. A tag or Release created by a person in the GitHub UI starts
+# publish-tag.yml through its tag push trigger instead.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create on the head of master
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # A manual run from another branch must never create a production tag.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Create the tag, publish, and create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TAG_PATTERN: '^2\.[0-9]+\.[0-9]+$'
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ $TAG_PATTERN ]]; then
+            echo "::error::Tag ${TAG} does not match ${TAG_PATTERN}."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag ${TAG} already exists. Release tags are never moved."
+            exit 1
+          fi
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/${TAG}"
+          gh workflow run publish-tag.yml --repo "$GITHUB_REPOSITORY" --ref master -f "tag=${TAG}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release ${TAG} already exists."
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag \
+              || echo "::warning::release create failed for ${TAG}"
+          fi
