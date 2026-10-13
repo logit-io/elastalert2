@@ -1,0 +1,117 @@
+name: Upstream sync
+
+# Keeps this fork in step with jertel/elastalert2. Weekly (and on demand), if
+# master is behind upstream master, it pushes an upstream-sync/<date> branch
+# and opens a PR into master. It never merges; a human reviews and merges.
+#
+# The branch is a merge of upstream master into our master, so our own
+# workflows (publish, verify-image) are present on it. If that merge
+# conflicts, the branch is upstream master as-is and the PR says so; resolve
+# the conflicts on the branch before merging.
+#
+# PRs opened with GITHUB_TOKEN do not trigger other workflows, so the
+# pull_request build checks would not run on them. To cover that, this
+# workflow dispatches verify-image.yml on the sync branch; the run is on the
+# branch's head commit, so its `verify-image` check shows on the PR. Upstream's
+# master_build_test runs once the PR is merged, or push any commit to the
+# branch to get the full pull_request checks.
+#
+# Token: GITHUB_TOKEN cannot push commits that change .github/workflows/*
+# (it has no `workflows` permission). When upstream changes a workflow, the
+# push fails with a clear error. Set an optional UPSTREAM_SYNC_TOKEN secret
+# (fine-grained PAT, contents + pull requests + workflows on this repo) to
+# cover that; PRs opened with it also trigger the normal checks.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Needed only to dispatch verify-image.yml on the sync branch.
+  actions: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository_owner == 'logit-io'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+      UPSTREAM: https://github.com/jertel/elastalert2.git
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+
+      - name: Sync from upstream
+        run: |
+          set -euo pipefail
+          git fetch --no-tags "$UPSTREAM" master:refs/remotes/upstream/master
+          if git merge-base --is-ancestor upstream/master HEAD; then
+            echo "master already contains upstream master. Nothing to do."
+            exit 0
+          fi
+
+          open=$(gh pr list --state open --base master --limit 100 \
+            --json headRefName \
+            --jq '[.[] | select(.headRefName | startswith("upstream-sync/"))] | length')
+          if [[ "$open" != "0" ]]; then
+            echo "An upstream-sync PR is already open. Skipping."
+            exit 0
+          fi
+
+          branch="upstream-sync/$(date -u +%F)"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "::error::Branch $branch exists with no open PR. Delete it or rerun tomorrow."
+            exit 1
+          fi
+          behind=$(git rev-list --count HEAD..upstream/master)
+          upstream_sha=$(git rev-parse upstream/master)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          conflicts=false
+          if git merge --no-ff --no-edit -m "Merge jertel/elastalert2 master into master (upstream sync $(date -u +%F))" upstream/master; then
+            ref=HEAD
+          else
+            git merge --abort
+            conflicts=true
+            ref=upstream/master
+          fi
+
+          if ! git push origin "${ref}:refs/heads/${branch}"; then
+            echo "::error::Push failed. If upstream changed .github/workflows, GITHUB_TOKEN cannot push it; set the UPSTREAM_SYNC_TOKEN secret or sync by hand."
+            exit 1
+          fi
+
+          {
+            echo "Automated sync of [jertel/elastalert2](https://github.com/jertel/elastalert2) master (${upstream_sha}) into master. Master is ${behind} commit(s) behind."
+            echo
+            if [[ "$conflicts" == true ]]; then
+              echo "**The merge conflicts.** This branch is upstream master as-is. Resolve the conflicts on this branch (keep our .github/workflows publish files) before merging."
+            else
+              echo "The branch is a merge commit of upstream master into our master, so our workflows are kept."
+            fi
+            echo
+            echo "Merge with a merge commit (not squash or rebase) so upstream history is kept."
+            echo
+            echo "Checks: PRs opened with GITHUB_TOKEN don't trigger pull_request workflows. The sync workflow dispatches verify-image.yml on this branch, which reports the verify-image check here. Push a commit to the branch to run the rest."
+          } > /tmp/body.md
+          gh pr create --base master --head "$branch" \
+            --title "Sync upstream jertel/elastalert2 ($(date -u +%F))" \
+            --body-file /tmp/body.md
+
+          if git cat-file -e "${ref}:.github/workflows/verify-image.yml" 2>/dev/null; then
+            gh workflow run verify-image.yml --ref "$branch"
+            echo "Dispatched verify-image.yml on $branch."
+          else
+            echo "::warning::verify-image.yml is not on $branch; no build check was dispatched."
+          fi
