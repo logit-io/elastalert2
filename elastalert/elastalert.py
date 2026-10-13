@@ -145,6 +145,7 @@ class ElastAlerter(object):
         self.alert_time_limit = self.conf['alert_time_limit']
         self.old_query_limit = self.conf['old_query_limit']
         self.disable_rules_on_error = self.conf['disable_rules_on_error']
+        self.allow_queries_on_degraded_indices = self.conf['allow_queries_on_degraded_indices']
         self.notify_email = self.conf.get('notify_email', [])
         self.notify_all_errors = self.conf.get('notify_all_errors', False)
         self.notify_alert = self.conf.get('notify_alert', [])
@@ -337,9 +338,10 @@ class ElastAlerter(object):
 
             # Convert the timestamp to a datetime
             ts = lookup_es_key(hit['_source'], rule['timestamp_field'])
-            if not ts and not rule["_source_enabled"]:
+            if ts is None:
                 raise EAException(
-                    "Error: No timestamp was found for hit. '_source_enabled' is set to false, check your mappings for stored fields"
+                    f"Error: The configured timestamp_field '{rule['timestamp_field']}' was not found in the query results. "
+                    f"Available fields: {list(hit['_source'].keys())}"
                 )
 
             set_es_key(hit['_source'], rule['timestamp_field'], rule['ts_to_dt'](ts))
@@ -386,6 +388,7 @@ class ElastAlerter(object):
         if rule.get('include_fields', None) is not None:
             query['fields'] = rule['include_fields']
 
+        max_query_size = rule.get('max_query_size', self.max_query_size)
         try:
             if scroll:
                 res = self.thread_data.current_es.scroll(scroll_id=rule['scroll_id'], scroll=scroll_keepalive)
@@ -393,7 +396,7 @@ class ElastAlerter(object):
                 res = self.thread_data.current_es.search(
                     scroll=scroll_keepalive,
                     index=index,
-                    size=rule.get('max_query_size', self.max_query_size),
+                    size=max_query_size,
                     body=query,
                     ignore_unavailable=True,
                     **extra_args
@@ -403,14 +406,33 @@ class ElastAlerter(object):
 
                 self.thread_data.total_hits = int(res['hits']['total']['value'])
 
-            if len(res.get('_shards', {}).get('failures', [])) > 0:
-                try:
-                    errs = [e['reason']['reason'] for e in res['_shards']['failures'] if 'Failed to parse' in e['reason']['reason']]
-                    if len(errs):
-                        raise ElasticsearchException(errs)
-                except (TypeError, KeyError):
-                    # Different versions of ES have this formatted in different ways. Fallback to str-ing the whole thing
-                    raise ElasticsearchException(str(res['_shards']['failures']))
+            # Handles shard failures
+            if rule.get('allow_queries_on_degraded_indices', self.allow_queries_on_degraded_indices):
+                # Allow queries on degraded data streams
+                shard_failures = res.get('_shards', {}).get('failures', [])
+                if len(shard_failures) > 0:
+                    reasons = [str(f) for f in shard_failures]
+                    # Trigger Exception only if Elasticsearch query failed to parse
+                    parse_errs = [r for r in reasons if 'Failed to parse' in r]
+                    if parse_errs:
+                        raise ElasticsearchException(parse_errs)
+                    # If query still worked but returns some errors, continue...
+                    failed_indices = ', '.join(sorted({str(f.get('index')) for f in shard_failures if isinstance(f, dict)}))
+                    if len(failed_indices) > 1024:
+                        failed_indices = failed_indices[:1024] + '... (%d characters removed)' % (len(failed_indices) - 1024)
+                    elastalert_logger.warning(
+                        'Rule %s: %d shard(s) failed, continuing with partial results. Affected indices: %s',
+                        rule['name'], res['_shards'].get('failed', len(shard_failures)), failed_indices)
+            else:
+                # Stop rule if any error with at least one shard of a data stream
+                if len(res.get('_shards', {}).get('failures', [])) > 0:
+                    try:
+                        errs = [e['reason']['reason'] for e in res['_shards']['failures'] if 'Failed to parse' in e['reason']['reason']]
+                        if len(errs):
+                            raise ElasticsearchException(errs)
+                    except (TypeError, KeyError):
+                        # Different versions of ES have this formatted in different ways. Fallback to str-ing the whole thing
+                        raise ElasticsearchException(str(res['_shards']['failures']))
 
             elastalert_logger.debug(str(res))
         except ElasticsearchException as e:
@@ -430,8 +452,11 @@ class ElastAlerter(object):
             self.thread_data.num_hits,
             len(hits)
         )
-        if self.thread_data.total_hits > rule.get('max_query_size', self.max_query_size):
+        if self.thread_data.total_hits > max_query_size:
             elastalert_logger.info("%s (scrolling..)" % status_log)
+        elif res.get('esql') and max_query_size and len(hits) >= max_query_size:
+            # ES|QL cannot scroll
+            elastalert_logger.warning("%s (results may be truncated)" % status_log)
         else:
             elastalert_logger.info(status_log)
 
@@ -926,7 +951,14 @@ class ElastAlerter(object):
             if query_key_value is not None:
                 silence_cache_key += '.' + query_key_value
 
-            if self.is_silenced(rule['name'] + "._silence") or self.is_silenced(silence_cache_key):
+            # Check cache first to reduce unnecessary ES queries
+            # Effectively, this checks query key cache first. Then checks rule cache. Then checks the rule via ES.
+            # Followed by a second (duplicated) query key cache check, and then finally a query key check via ES. 
+            # It could be further improved to eliminate the second query key cache check but this implementation
+            # favors both cache checks up front, before any ES hit, which is an overall performance improvement
+            # compared to the original logic, which required a rule check via ES before checking the query key cache.
+            if self.is_silenced(silence_cache_key, check_cache_only=True) or \
+               self.is_silenced(rule['name'] + "._silence") or self.is_silenced(silence_cache_key):
                 elastalert_logger.info('Ignoring match for silenced rule %s' % (silence_cache_key,))
                 continue
 
@@ -1599,7 +1631,7 @@ class ElastAlerter(object):
 
                     # Delete it from the index
                     try:
-                        self.writeback_es.delete(index=self.writeback_index, id=_id)
+                        self.writeback_es.delete_by_query(index=self.writeback_index, body={'query': {'term': {'_id': _id}}})
                     except ElasticsearchException:  # TODO: Give this a more relevant exception, try:except: is evil.
                         self.handle_error("Failed to delete alert %s at %s" % (_id, alert_time))
 
@@ -1633,7 +1665,7 @@ class ElastAlerter(object):
                                            size=self.max_aggregation)
             for match in res['hits']['hits']:
                 matches.append(match['_source'])
-                self.writeback_es.delete(index=self.writeback_index, id=match['_id'])
+                self.writeback_es.delete_by_query(index=self.writeback_index, body={'query': {'term': {'_id': match['_id']}}})
         except (KeyError, ElasticsearchException) as e:
             self.handle_error("Error fetching aggregated matches: %s" % (e), {'id': _id})
         return matches
@@ -1785,13 +1817,13 @@ class ElastAlerter(object):
         self.silence_cache[silence_cache_key] = (timestamp, exponent)
         return self.writeback('silence', body)
 
-    def is_silenced(self, rule_name):
+    def is_silenced(self, rule_name, check_cache_only=False):
         """ Checks if rule_name is currently silenced. Returns false on exception. """
         if rule_name in self.silence_cache:
             if ts_now() < self.silence_cache[rule_name][0]:
                 return True
 
-        if self.debug:
+        if self.debug or check_cache_only:
             return False
         query = {'term': {'rule_name': rule_name}}
         sort = {'sort': {'until': {'order': 'desc'}}}
