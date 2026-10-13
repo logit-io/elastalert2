@@ -9,8 +9,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  # Named verify-image so it doesn't clash with the upstream master_build_test `build` check.
+  verify-image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
