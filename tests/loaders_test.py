@@ -19,7 +19,6 @@ from elastalert.loaders import (
 
 from elastalert.util import EAException
 
-
 loaders_test_cases_path = os.path.join(os.path.dirname(__file__), 'loaders_test_cases')
 empty_folder_test_path = os.path.join(loaders_test_cases_path, 'empty')
 
@@ -66,21 +65,19 @@ def test_import_rules():
         mock_open.return_value = test_rule_copy
 
         # Test that type is imported
-        with mock.patch('builtins.__import__') as mock_import:
-            mock_import.return_value = elastalert.ruletypes
+        with mock.patch('elastalert.loaders.get_module') as mock_get_module:
+            mock_get_module.return_value = elastalert.ruletypes.RuleType
             rules_loader.load_configuration('test_config', test_config)
-        assert mock_import.call_args_list[0][0][0] == 'testing.test'
-        assert mock_import.call_args_list[0][0][3] == ['RuleType']
+        assert mock_get_module.call_args_list[0][0][0] == 'testing.test.RuleType'
 
         # Test that alerts are imported
         test_rule_copy = copy.deepcopy(test_rule)
         mock_open.return_value = test_rule_copy
         test_rule_copy['alert'] = 'testing2.test2.Alerter'
-        with mock.patch('builtins.__import__') as mock_import:
-            mock_import.return_value = elastalert.alerts
+        with mock.patch('elastalert.loaders.get_module') as mock_get_module:
+            mock_get_module.return_value = elastalert.alerts.Alerter
             rules_loader.load_configuration('test_config', test_config)
-        assert mock_import.call_args_list[0][0][0] == 'testing2.test2'
-        assert mock_import.call_args_list[0][0][3] == ['Alerter']
+        assert mock_get_module.call_args_list[0][0][0] == 'testing2.test2.Alerter'
 
 
 def test_import_import():
@@ -731,3 +728,42 @@ def test_load_yaml_imports_modified():
 def test_load_rule_schema():
     validator = load_rule_schema()
     validator.check_schema(validator.schema)
+
+
+def test_summary_table_fields_schema():
+    validator = load_rule_schema()
+    base_rule = {'type': 'any', 'index': 'test', 'alert': 'debug'}
+
+    def errors_for(value):
+        rule = dict(base_rule, summary_table_fields=value)
+        return [e for e in validator.iter_errors(rule)
+                if 'summary_table_fields' in list(e.absolute_path)]
+
+    # Valid: original string-form list
+    assert errors_for(['host.hostname', 'metric_agg_value_formatted']) == []
+    # Valid: dict-form with both path and header
+    assert errors_for([{'path': 'host.hostname', 'header': 'Hostname'}]) == []
+    # Valid: dict-form with header omitted
+    assert errors_for([{'path': 'host.hostname'}]) == []
+    # Valid: mixed string and dict entries
+    assert errors_for(['host.hostname', {'path': 'metric_agg_value_formatted', 'header': 'Avg'}]) == []
+    # Invalid: dict missing required 'path'
+    assert errors_for([{'header': 'Hostname'}]) != []
+    # Invalid: dict with unknown property
+    assert errors_for([{'path': 'host.hostname', 'foo': 'bar'}]) != []
+
+
+@pytest.mark.parametrize('rule_limit, conf_limit, expected', [
+    (None, None, 'FROM logs-*'),
+    (None, 5000, 'FROM logs-*\n| limit 5000'),
+    (100, 5000, 'FROM logs-*\n| limit 100'),
+])
+def test_load_options_esql_limit(rule_limit, conf_limit, expected):
+    test_config_copy = dict(test_config, max_query_size=10000, esql_limit=conf_limit)
+    rules_loader = FileRulesLoader(test_config_copy)
+    test_rule_copy = copy.deepcopy(test_rule)
+    test_rule_copy['filter'] = [{'esql': 'FROM logs-*'}, {'term': {'key': 'value'}}]
+    if rule_limit:
+        test_rule_copy['max_query_size'] = rule_limit
+    rules_loader.load_options(test_rule_copy, test_config_copy, 'filename.yaml')
+    assert test_rule_copy['filter'] == [{'esql': expected}, {'term': {'key': 'value'}}]

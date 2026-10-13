@@ -72,10 +72,14 @@ def load_conf(args, defaults=None, overrides=None):
     if required_globals - frozenset(list(conf.keys())):
         raise EAException('%s must contain %s' % (filename, ', '.join(required_globals - frozenset(list(conf.keys())))))
 
+    # Only an explicit max_query_size (not the default below) limits ES|QL. This line must above the 10000 limit set below.
+    # This esql_limit is internal only and cannot be overriden via a config or rule yaml.
+    conf['esql_limit'] = conf.get('max_query_size')
     conf.setdefault('max_query_size', 10000)
     conf.setdefault('scroll_keepalive', '30s')
     conf.setdefault('max_scrolling_count', 990) # Avoid stack overflow in run_query, note that 1000 is Python's stack limit
     conf.setdefault('disable_rules_on_error', True)
+    conf.setdefault('allow_queries_on_degraded_indices', False)
     conf.setdefault('scan_subdirectories', True)
     conf.setdefault('rules_loader', 'file')
     conf.setdefault('custom_pretty_ts_format', None)

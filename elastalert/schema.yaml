@@ -51,23 +51,12 @@ definitions:
     type: array
     items: *slackField
 
-  msTeamsFact: &msTeamsFact
-    type: object
-    additionalProperties: false
-    properties:
-      name: {type: string}
-      value: {type: string}
-
   msPowerAutomateFact: &msPowerAutomateFact
     type: object
     additionalProperties: false
     properties:
       name: {type: string}
       value: {type: string}
-
-  arrayOfMsTeamsFacts: &arrayOfMsTeamsFacts
-    type: array
-    items: *msTeamsFact
 
   arrayOfMsPowerAutomateFacts: &arrayOfMsPowerAutomateFacts
     type: array
@@ -184,6 +173,7 @@ oneOf:
       threshold_cur: {type: number}
       min_doc_count: {type: integer}
       percentile_range: {type: integer}
+      metric_agg_script: {type: [string, object]}
 
   - title: Flatline
     required: [threshold, timeframe]
@@ -231,6 +221,7 @@ oneOf:
       bucket_interval: *timeframe
       sync_bucket_interval: {type: boolean}
       metric_format_string: {type: string}
+      metric_agg_script: {type: [string, object]}
 
   - title: Percentage Match
     required: [match_bucket_filter]
@@ -311,13 +302,24 @@ properties:
   query_key: *arrayOfString
   replace_dots_in_field_names: {type: boolean}
   scan_entire_timeframe: {type: boolean}
+  allow_queries_on_degraded_indices: {type: boolean}
   
   ## System Error Notifications
   notify_alert: *stringOrArrayOfStringsOrObjects
   notify_all_errors: {type: boolean}
 
   ### summary table
-  summary_table_fields: {type: array, items: {type: string}}
+  summary_table_fields:
+    type: array
+    items:
+      oneOf:
+        - type: string
+        - type: object
+          additionalProperties: false
+          required: [path]
+          properties:
+            path: {type: string, minLength: 1}
+            header: {type: string}
   summary_table_type: {type: string, enum: ['ascii', 'html', 'markdown']}
   summary_table_max_rows: {type: integer, minimum: 0}
   summary_prefix: {type: string}
@@ -443,6 +445,13 @@ properties:
   sns_aws_region: {type: string}
   sns_aws_profile: {type: string}
 
+  ### AWS SQS
+  sqs_queue_url: {type: string}
+  sqs_aws_access_key_id: {type: string}
+  sqs_aws_secret_access_key: {type: string}
+  sqs_aws_region: {type: string}
+  sqs_aws_profile: {type: string}
+
   ### Chatwork
   chatwork_apikey: {type: string}
   chatwork_room_id: {type: string}
@@ -459,6 +468,7 @@ properties:
   ### Datadog
   datadog_api_key: {type: string}
   datadog_app_key: {type: string}
+  datadog_api_url: {type: string}
 
   ### Dingtalk
   dingtalk_access_token: {type: string}
@@ -660,6 +670,10 @@ properties:
   lark_bot_id: { type: string }
   lark_msgtype: { type: string, enum: [ 'text' ] }
 
+  ### LINE Messaging API
+  line_channel_access_token: {type: string}
+  line_to: {type: string}
+
   ### Matrix Hookshot
   matrixhookshot_ca_certs: {type: [boolean, string]}
   matrixhookshot_webhook_url: *arrayOfString
@@ -696,22 +710,6 @@ properties:
   mattermost_attach_opensearch_discover_url: {type: boolean}
   mattermost_opensearch_discover_color: {type: string}
   mattermost_opensearch_discover_title: {type: string}
-
-
-  ### Microsoft Teams
-  ms_teams_webhook_url: *arrayOfString
-  ms_teams_alert_summary: {type: string}
-  ms_teams_theme_color: {type: string}
-  ms_teams_proxy: {type: string}
-  ms_teams_alert_fixed_width: {type: boolean}
-  ms_teams_alert_facts: *arrayOfMsTeamsFacts
-  ms_teams_attach_kibana_discover_url: {type: boolean}
-  ms_teams_kibana_discover_title: {type: string}
-  ms_teams_ca_certs: {type: [boolean, string]}
-  ms_teams_ignore_ssl_errors: {type: boolean}
-  ms_teams_attach_opensearch_discover_url: {type: boolean}
-  ms_teams_opensearch_discover_title: {type: string}
-
 
   ### Microsoft Power Automate
   ms_power_automate_webhook_url: *arrayOfString
@@ -772,6 +770,8 @@ properties:
   pagerduty_incident_key: {type: string}
   pagerduty_incident_key_args: {type: array, items: {type: string}}
   pagerduty_proxy: {type: string}
+  pagerduty_proxy_login: {type: string}
+  pagerduty_proxy_pass: {type: string}
   pagerduty_ca_certs: {type: [boolean, string]}
   pagerduty_ignore_ssl_errors: {type: boolean}
   pagerduty_api_version: {type: string, enum: ['v1', 'v2']}

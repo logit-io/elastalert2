@@ -1,6 +1,87 @@
 # 2.TBD.TBD
 
 ## Breaking changes
+- TBD
+
+## New features
+- [PagerDuty] Add NTLM authentication support for HTTPS proxies - [#1772](https://github.com/jertel/elastalert2/pull/1772) - @sauravnz
+- [Elasticsearch] Add opt-in flag to allow queries on degraded Elasticsearch indices - [#1777](https://github.com/jertel/elastalert2/pull/1777) - @fhaldi
+
+## Other changes
+- [Helm] Omit enabled flag in probe definitions - [#1775](https://github.com/jertel/elastalert2/pull/1775) - @jim-barber-he
+- For ES|QL filters, apply a configured max_query_size as a LIMIT and warn when results may be truncated - [#1774](https://github.com/jertel/elastalert2/pull/1774) - @defensivedepth
+
+# 2.31.0
+
+## Breaking changes
+- None
+
+## New features
+- Add ES|QL (Elasticsearch Piped Query Language) support - [#1767](https://github.com/jertel/elastalert2/pull/1767) - @jertel
+
+## Other changes
+- [Kibana] Fix discover URLs when query_key values are empty - [#1769](https://github.com/jertel/elastalert2/pull/1769) - @thejohnrichard
+
+# 2.30.0
+
+## Breaking changes
+- None
+
+## New features
+- [Datadog] Add optional `datadog_api_url` parameter to support regional Datadog sites (US3, US5, EU1, AP1, etc.) - [#1754](https://github.com/jertel/elastalert2/pull/1754) - @BillyWeans
+- `summary_table_fields` now accepts a dict form with `path` and optional `header` keys for custom column labels - [#1763](https://github.com/jertel/elastalert2/pull/1763) - @dennis-trapp
+
+## Other changes
+- Replace `es.delete()` with `delete_by_query()` in aggregation cleanup to support Elasticsearch data streams as the writeback index - [#1755](https://github.com/jertel/elastalert2/pull/1755) - @peterlehot
+- Remove MS Teams Alerter - [#1757](https://github.com/jertel/elastalert2/pull/1757) - @nsano-rururu
+- Upgrade dependency library pylint to 4.0.5 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library pytest-cov to 7.1.0 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library sphinx to 9.1.0 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library sphinx_rtd_theme to 3.1.0 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library tox to 4.54.0 - [#1764](https://github.com/jertel/elastalert2/pull/1764) - @jertel
+- Upgrade dependency library apscheduler to 3.11.2 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library boto3 to 1.43.14 - [#1764](https://github.com/jertel/elastalert2/pull/1764) - @jertel
+- Upgrade dependency library croniter to 6.2.2 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library jsonpointer to 3.1.1 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library jsonschema to 4.26.0 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library prettytable to 3.17.0 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library prometheus-client to 0.25.0 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library pytz to 2026.2 - [#1764](https://github.com/jertel/elastalert2/pull/1764) - @jertel
+- Upgrade dependency library zabbix-utils to 2.0.4 - [#1760](https://github.com/jertel/elastalert2/pull/1760) - @jertel
+- Upgrade dependency library requests to 2.34.2 - [#1764](https://github.com/jertel/elastalert2/pull/1764) - @jertel
+- Upgrade dependency library tencentcloud-sdk-python to 3.1.101 - [#1764](https://github.com/jertel/elastalert2/pull/1764) - @jertel
+- Upgrade dependency library twilio to 9.10.9 - [#1764](https://github.com/jertel/elastalert2/pull/1764) - @jertel
+- Upgrade base Docker image to python:3.14.5-slim - [#1764](https://github.com/jertel/elastalert2/pull/1764) - @jertel
+
+# 2.29.0
+
+## Breaking changes
+- None
+
+## New features
+- Add AWS SQS alerter for sending alerts to Amazon Simple Queue Service queues - [#1750](https://github.com/jertel/elastalert2/pull/1750) - @AnthraX1
+
+## Other changes
+- [Docs] Clarified Slack webhook URL documentation as it related to legacy vs app webhooks - [#1745](https://github.com/jertel/elastalert2/pull/1745) - @jertel
+- [README] Update ElastAlert GitHub repository link in README - [#1747](https://github.com/jertel/elastalert2/pull/1747) - @nsano-rururu
+- Fix missing `pytz` dependency - [#1752](https://github.com/jertel/elastalert2/pull/1752) - @m4dh4t
+
+# 2.28.0
+
+## Breaking changes
+- metric_agg_script with metric_agg_type: percentiles now applies the percentile_range to the Elasticsearch query. Previously, this was ignored and ElastAlert2 always evaluated the first percentile (p1). If you relied on that behavior, you may need to update your configuration. - [#1738](https://github.com/jertel/elastalert2/pull/1738) - @koooommmm
+
+## New features
+- [LINE Message API] Add LINE Messaging API Alerter - [#1724](https://github.com/jertel/elastalert2/pull/1724) - @nsano-rururu
+
+## Other changes
+- [Zabbix] Migrating from py-zabbix to python-zabbix-utils - [#1722](https://github.com/jertel/elastalert2/pull/1722) - @nsano-rururu
+- [Docs] Correct webex webhook alerter example - [#1c8f79f](https://github.com/jertel/elastalert2/commit/1c8f79fcf89085e3ee68bb59f709c214ef2c8eff) - @jertel
+- [Docs] Updated elastalert.rst and alerts.rst and fixed broken links - [#1741](https://github.com/jertel/elastalert2/pull/1741) - @nsano-rururu
+
+# 2.27.0
+
+## Breaking changes
 - None
 
 ## New features
@@ -8,6 +89,24 @@
 
 ## Other changes
 - Fix percentile metric_aggregation rule error for rules with compound query keys - [#1701](https://github.com/jertel/elastalert2/pull/1701) - @jhatcher1
+- Support Python 3.14 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: boto3 to 1.40.59 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: cffi to 2.0.0 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: jinja2 to 3.1.6 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: jira to 3.10.5 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: jsonschema to 4.25.1 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: prettytable to 3.16.0 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: prometheus-client to 0.23.1 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: pyyaml to 6.0.3 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: requests to 2.32.5 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: tencentcloud-sdk-python to 3.0.1479 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update library: twilio to 9.8.4 - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update build libraries: pylint, pytest, pytest-cov, pytest-xdist, sphinx, tox - [#1706](https://github.com/jertel/elastalert2/pull/1706) - @nsano-rururu
+- Update docs build to use Ubuntu 24.40 and Python 3.13 - [#1708](https://github.com/jertel/elastalert2/pull/1708) - @jertel
+- Cleanup unused imports - [#1708](https://github.com/jertel/elastalert2/pull/1708) - @jertel
+- [Jira] Updated for Jira Cloud API deprecation - [#1709](https://github.com/jertel/elastalert2/pull/1709) - @leesmith110
+- Reduce unnecessary ES queries when checking for silenced rules - [#1715](https://github.com/jertel/elastalert2/pull/1715) - @zpcc
+- [Chatwork] Fix Chatwork - [#1716](https://github.com/jertel/elastalert2/pull/1716) - @nsano-rururu
 
 # 2.26.0
 
