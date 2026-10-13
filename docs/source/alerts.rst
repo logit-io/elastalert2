@@ -35,9 +35,9 @@ or
       - iris
       - jira
       - lark
+      - line
       - matrixhookshot
       - mattermost
-      - ms_teams
       - ms_power_automate
       - opsgenie
       - pagerduty
@@ -308,7 +308,7 @@ Alertmanager
 ~~~~~~~~~~~~
 
 This alert type will send alerts to Alertmanager postAlerts. ``alert_subject`` and ``alert_text`` are passed as the annotations labeled ``summary`` and ``description`` accordingly. The labels can be changed.
-See https://prometheus.io/docs/alerting/clients/ for more details about the Alertmanager alert format.
+See https://prometheus.io/docs/alerting/latest/alerts_api/ for more details about the Alertmanager alert format.
 
 Required:
 
@@ -545,6 +545,47 @@ Example When to use aws_profile usage::
     sns_topic_arn: 'arn:aws:sns:us-east-1:123456789:somesnstopic'
     sns_aws_profile: 'default'
 
+AWS SQS (Amazon Simple Queue Service)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The AWS SQS alerter will send an alert message to an AWS SQS queue as a JSON object containing the rule name, matches, and alert text.
+The AWS SQS alerter uses boto3 and can use credentials in the rule yaml, in a standard AWS credential and config files, or
+via environment variables. See http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html for details.
+
+Messages that exceed the SQS 1 MB size limit will be automatically truncated.
+
+If ``sqs_aws_region`` is not set in the rule, the region will be automatically inferred from the SQS queue URL (for example, ``https://sqs.eu-west-1.amazonaws.com/...`` will use ``eu-west-1``).
+
+AWS SQS requires one option:
+
+``sqs_queue_url``: The URL of the SQS queue. For example, ``https://sqs.us-east-1.amazonaws.com/123456789012/my-queue``
+
+Optional:
+
+``sqs_aws_access_key_id``: An access key to connect to SQS with.
+
+``sqs_aws_secret_access_key``: The secret key associated with the access key.
+
+``sqs_aws_region``: The AWS region in which the SQS resource is located. Default is us-east-1
+
+``sqs_aws_profile``: The AWS profile to use. If none specified, the default will be used.
+
+Example when not using aws_profile::
+
+    alert:
+      - sqs
+    sqs_queue_url: 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue'
+    sqs_aws_access_key_id: 'XXXXXXXXXXXXXXXXXX'
+    sqs_aws_secret_access_key: 'YYYYYYYYYYYYYYYYYYYY'
+    sqs_aws_region: 'us-east-1'
+
+Example when using aws_profile::
+
+    alert:
+      - sqs
+    sqs_queue_url: 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue'
+    sqs_aws_profile: 'default'
+
 Chatwork
 ~~~~~~~~
 
@@ -626,12 +667,18 @@ This alert requires two additional options:
 
 ``datadog_app_key``: `Datadog application key`_
 
+Optional:
+
+``datadog_api_url``: The Datadog Events API endpoint URL. Defaults to ``https://api.datadoghq.com/api/v1/events``.
+Override this to target a regional Datadog site, for example ``https://api.us5.datadoghq.com/api/v1/events`` for US5.
+
 Example usage::
 
     alert:
       - "datadog"
     datadog_api_key: "Datadog API Key"
     datadog_app_key: "Datadog APP Key"
+    datadog_api_url: "https://api.us5.datadoghq.com/api/v1/events"
 
 .. _`Datadog Event`: https://docs.datadoghq.com/events/
 .. _`Datadog API key`: https://docs.datadoghq.com/account_management/api-app-keys/#api-keys
@@ -965,10 +1012,10 @@ Optional:
 
 ``gelf_timeout``: Custom timeout.
 
-Grafana OnCall
-~~~~~~~~~~~~~~
+Grafana IRM
+~~~~~~~~~~~~
 
-https://grafana.com/docs/oncall/latest/integrations/elastalert/
+https://grafana.com/docs/grafana-cloud/alerting-and-irm/irm/configure/integrations/integration-reference/oncall/elastalert/
 
 HTTP POST
 ~~~~~~~~~
@@ -1377,6 +1424,12 @@ Example usage::
 ``jira_bump_after_inactivity``: If this is set, ElastAlert 2 will only comment on tickets that have been inactive for at least this many days.
 It only applies if ``jira_bump_tickets`` is true. Default is 0 days.
 
+.. note:: 
+   **API Migration Notice**: Starting May 1, 2025, Atlassian deprecated the legacy JQL search endpoints. ElastAlert 2 
+   now uses the Jira client's ``enhanced_search_issues`` method for bumping logic, which automatically uses the new 
+   Jira API endpoints internally. This change is transparent for users with compatible Jira library versions (3.10.5+). 
+   No configuration changes required.
+
 Arbitrary Jira fields:
 
 ElastAlert 2 supports setting any arbitrary Jira field that your Jira issue supports. For example, if you had a custom field, called "Affected User", you can set it by providing that field name in ``snake_case`` prefixed with ``jira_``.  These fields can contain primitive strings or arrays of strings. Note that when you create a custom field in your Jira server, internally, the field is represented as ``customfield_1111``. In ElastAlert 2, you may refer to either the public facing name OR the internal representation.
@@ -1417,6 +1470,24 @@ Example usage::
       - "lark"
     lark_bot_id: "your lark bot id"
     lark_msgtype: "text"
+
+LINE Messaging API
+~~~~~~~~~~~~~~~~~~
+
+LINE Messaging API will send notification to a Line application. The body of the notification is formatted the same as with other alerters.
+
+Required:
+
+``line_channel_access_token``: channel access token
+
+``line_to``: user id
+
+Example usage::
+
+    alert:
+      - "line"
+    line_channel_access_token: "Your channel access token"
+    line_to: "Your user id"
 
 Matrix Hookshot
 ~~~~~~~~~~~~~~~
@@ -1560,97 +1631,6 @@ Example mattermost_attach_opensearch_discover_url, mattermost_kibana_discover_co
     mattermost_opensearch_discover_color: "#ec4b98"
     mattermost_opensearch_discover_title: "Discover in opensearch"
 
-
-Microsoft Teams
-~~~~~~~~~~~~~~~
-
-Microsoft Teams alerter will send a notification to a predefined Microsoft Teams channel.
-
-The alerter requires the following options:
-
-``ms_teams_webhook_url``: The webhook URL that includes your auth data and the ID of the channel you want to post to. Go to the Connectors
-menu in your channel and configure an Incoming Webhook, then copy the resulting URL. You can use a list of URLs to send to multiple channels.
-
-Optional:
-
-``ms_teams_alert_summary``: MS Teams use this value for notification title, defaults to `Alert Subject <https://elastalert2.readthedocs.io/en/latest/ruletypes.html#alert-subject>`_. You can set this value with arbitrary text if you don't want to use the default.
-
-``ms_teams_theme_color``: By default the alert will be posted without any color line. To add color, set this attribute to a HTML color value e.g. ``#ff0000`` for red.
-
-``ms_teams_proxy``: By default ElastAlert 2 will not use a network proxy to send notifications to MS Teams. Set this option using ``hostname:port`` if you need to use a proxy. only supports https.
-
-``ms_teams_alert_fixed_width``: By default this is ``False`` and the notification will be sent to MS Teams as-is. Teams supports a partial Markdown implementation, which means asterisk, underscore and other characters may be interpreted as Markdown. Currently, Teams does not fully implement code blocks. Setting this attribute to ``True`` will enable line by line code blocks. It is recommended to enable this to get clearer notifications in Teams.
-
-``ms_teams_alert_facts``: You can add additional facts to your MS Teams alerts using this field. Specify the title using `name` and a value for the field or arbitrary text using `value`. 
-
-Example ms_teams_alert_facts::
-
-    ms_teams_alert_facts:
-      - name: Host
-        value: monitor.host
-      - name: Status
-        value: monitor.status
-      - name: What to do
-        value: Page your boss
-
-``ms_teams_attach_kibana_discover_url``: Enables the attachment of the ``kibana_discover_url`` to the MS Teams notification. The config ``generate_kibana_discover_url`` must also be ``True`` in order to generate the url. Defaults to ``False``.
-
-``ms_teams_kibana_discover_title``: The title of the Kibana Discover url attachment. Defaults to ``Discover in Kibana``.
-
-``ms_teams_attach_opensearch_discover_url``: Enables the attachment of the ``opensearch_discover_url`` to the MS Teams notification. The config ``generate_opensearch_discover_url`` must also be ``True`` in order to generate the url. Defaults to ``False``.
-
-``ms_teams_opensearch_discover_title``: The title of the Opensearch Discover url attachment. Defaults to ``Discover in opensearch``.
-
-Example ms_teams_attach_kibana_discover_url, ms_teams_kibana_discover_title::
-
-    # (Required)
-    generate_kibana_discover_url: True
-    kibana_discover_app_url: "http://localhost:5601/app/discover#/"
-    kibana_discover_index_pattern_id: "4babf380-c3b1-11eb-b616-1b59c2feec54"
-    kibana_discover_version: "7.15"
-
-    # (Optional)
-    kibana_discover_from_timedelta:
-      minutes: 10
-    kibana_discover_to_timedelta:
-      minutes: 10
-
-    # (Required)
-    ms_teams_attach_kibana_discover_url: True
-
-    # (Optional)
-    ms_teams_kibana_discover_title: "Discover in Kibana"
-
-Example ms_teams_attach_opensearch_discover_url, ms_teams_opensearch_discover_title::
-
-    # (Required)
-    generate_opensearch_discover_url: True
-    opensearch_discover_app_url: "http://localhost:5601/app/discover#/"
-    opensearch_discover_index_pattern_id: "4babf380-c3b1-11eb-b616-1b59c2feec54"
-    opensearch_discover_version: "7.15"
-
-    # (Optional)
-    opensearch_discover_from_timedelta:
-      minutes: 10
-    opensearch_discover_to_timedelta:
-      minutes: 10
-
-    # (Required)
-    ms_teams_attach_opensearch_discover_url: True
-
-    # (Optional)
-    ms_teams_opensearch_discover_title: "Discover in opensearch"
-
-``ms_teams_ca_certs``: Set this option to ``True`` or a path to a CA cert bundle or directory (eg: ``/etc/ssl/certs/ca-certificates.crt``) to validate the SSL certificate.
-
-``ms_teams_ignore_ssl_errors``: By default ElastAlert 2 will verify SSL certificate. Set this option to ``True`` if you want to ignore SSL errors.
-
-Example usage::
-
-    alert:
-      - "ms_teams"
-    ms_teams_theme_color: "#6600ff"
-    ms_teams_webhook_url: "MS Teams Webhook URL"
 
 Microsoft Power Automate
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1864,7 +1844,19 @@ If there's no open (i.e. unresolved) incident with this key, a new one will be c
 
 ``pagerduty_incident_key_args``: If set, and ``pagerduty_incident_key`` is a formattable string, ElastAlert 2 will format the incident key based on the provided array of fields from the rule or match.
 
-``pagerduty_proxy``: By default ElastAlert 2 will not use a network proxy to send notifications to PagerDuty. Set this option using ``hostname:port`` if you need to use a proxy. only supports https.
+``pagerduty_proxy``: By default ElastAlert 2 will not use a network proxy to send notifications to PagerDuty. Set this option to the proxy URL, for example ``http://proxy.example.com:8080``, if you need to use a proxy. Only HTTPS PagerDuty requests are supported. Basic proxy authentication can be configured by embedding the credentials in the URL, for example ``http://username:password@proxy.example.com:8080``.
+
+``pagerduty_proxy_login``: Optional username for NTLM proxy authentication. Both this option and ``pagerduty_proxy_pass`` must be set to enable NTLM. Use the ``DOMAIN\username`` format when the proxy requires a Windows domain. In YAML, use single quotes around a username containing a backslash.
+
+``pagerduty_proxy_pass``: Optional password for NTLM proxy authentication. Both this option and ``pagerduty_proxy_login`` must be set to enable NTLM.
+
+For example:
+
+.. code-block:: yaml
+
+    pagerduty_proxy: http://proxy.example.com:8080
+    pagerduty_proxy_login: 'DOMAIN\username'
+    pagerduty_proxy_pass: '<password>'
 
 ``pagerduty_ca_certs``: Set this option to ``True`` or a path to a CA cert bundle or directory (eg: ``/etc/ssl/certs/ca-certificates.crt``) to validate the SSL certificate.
 
@@ -2102,8 +2094,14 @@ Slack alerter will send a notification to a predefined Slack channel. The body o
 
 The alerter requires the following option:
 
+``slack_webhook_url``: The webhook URL generated by your Slack App. Follow the quickstart guide at https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks to create a new webhook. Note that the advanced, interactive Slack formatting options, using the Block Kit components, are not supported.
+
+Legacy Incoming Webhooks:
+
+If you need to use the deprecated, legacy incoming webhooks in Slack then you can follow this next set of instructions to obtain the webhook URL.
+
 ``slack_webhook_url``: The webhook URL that includes your auth data and the ID of the channel (room) you want to post to. Go to the Incoming Webhooks
-section in your Slack account https://XXXXX.slack.com/services/new/incoming-webhook , choose the channel, click 'Add Incoming Webhooks Integration'
+section in your Slack account https://XXXXX.slack.com/services/new/incoming-webhook, choose the channel, click 'Add Incoming Webhooks Integration'
 and copy the resulting URL. You can use a list of URLs to send to multiple channels.
 
 Optional:
@@ -2586,7 +2584,7 @@ Example usage::
       - webex_webhook
     alert_text_type: alert_text_only
     webex_webhook_id: "your webex incoming webhook id"
-    webex_webhook: "markdown"
+    webex_webhook_msgtype: "markdown"
 
 WorkWechat
 ~~~~~~~~~~

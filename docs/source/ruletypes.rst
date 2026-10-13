@@ -379,13 +379,18 @@ ca_certs
 
 ``ca_certs``: Path to a CA cert bundle to use to verify SSL connections (Optional, string, no default)
 
-
 disable_rules_on_error
 ^^^^^^^^^^^^^^^^^^^^^^
 
 ``disable_rules_on_error``: If true, ElastAlert 2 will disable rules which throw uncaught (not EAException) exceptions. It
 will upload a traceback message to ``elastalert_metadata`` and if ``notify_email`` is set, send an email notification. The
 rule will no longer be run until either ElastAlert 2 restarts or the rule file has been modified. This defaults to ``True``.
+
+allow_queries_on_degraded_indices
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``allow_queries_on_degraded_indices``: If true, Elastalert 2 will still query Elasticsearch when some shards of the 
+data stream are unavailable. The default is ``false``.
 
 es_conn_timeout
 ^^^^^^^^^^^^^^^
@@ -510,6 +515,16 @@ Then, for the same sample data shown above listing alice and bob's events, Elast
     |       bob        |     something      |
     |      alice       |   something else   |
     +------------------+--------------------+
+
+Each entry may instead be a dict with a ``path`` (the field to look up) and an optional ``header`` (the column heading to display). If ``header`` is omitted, ``path`` is used as the heading. String and dict entries can be mixed in the same list. For example::
+
+    summary_table_fields:
+        - path: my_data.username
+          header: User
+        - path: my_data.event_type
+          header: Event
+
+would render with ``User`` and ``Event`` as column headings while still looking up values from ``my_data.username`` and ``my_data.event_type``.
 
 
 .. note::
@@ -993,7 +1008,7 @@ aggregation_key
 summary_table_fields
 ^^^^^^^^^^^^^^^^^^^^
 
-``summary_table_fields``: Specifying the summmary_table_fields in conjunction with an aggregation will make it so that each aggregated alert will contain a table summarizing the values for the specified fields in all the matches that were aggregated together.
+``summary_table_fields``: Specifying the summmary_table_fields in conjunction with an aggregation will make it so that each aggregated alert will contain a table summarizing the values for the specified fields in all the matches that were aggregated together. Each entry may be a string field path, or a dict of the form ``{path: <field>, header: <column label>}`` to override the rendered column heading; ``header`` defaults to ``path`` when omitted. See the prose section above for an example.
 
 summary_table_type
 ^^^^^^^^^^^^^^^^^^^^
@@ -1597,7 +1612,12 @@ Optional:
 ``query_key``: Group metric calculations by this field. For each unique value of the ``query_key`` field, the metric will be calculated and
 evaluated separately against the threshold(s).
 
-``metric_agg_script``: A `Painless` formatted script describing how to calculate your metric on-the-fly::
+``metric_agg_script``: A `Painless` formatted script describing how to calculate your metric on-the-fly. This can be either a string or a dictionary::
+
+    metric_agg_key: myScriptedMetric
+    metric_agg_script: "doc['field1'].value * doc['field2'].value"
+
+Or::
 
     metric_agg_key: myScriptedMetric
     metric_agg_script:

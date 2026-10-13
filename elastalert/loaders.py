@@ -27,6 +27,7 @@ import elastalert.alerters.httppost
 import elastalert.alerters.httppost2
 import elastalert.alerters.iris
 import elastalert.alerters.lark
+import elastalert.alerters.line
 import elastalert.alerters.pagertree
 import elastalert.alerters.rocketchat
 import elastalert.alerters.servicenow
@@ -40,6 +41,7 @@ import elastalert.alerters.webex_webhook
 import elastalert.alerters.workwechat
 from elastalert import alerts
 from elastalert import enhancements
+from elastalert import esql
 from elastalert import ruletypes
 from elastalert.alerters.alertmanager import AlertmanagerAlerter
 from elastalert.alerters.email import EmailAlerter
@@ -51,7 +53,7 @@ from elastalert.alerters.pagerduty import PagerDutyAlerter
 from elastalert.alerters.slack import SlackAlerter
 from elastalert.alerters.smseagle import SMSEagleAlerter
 from elastalert.alerters.sns import SnsAlerter
-from elastalert.alerters.teams import MsTeamsAlerter
+from elastalert.alerters.sqs import SqsAlerter
 from elastalert.alerters.powerautomate import MsPowerAutomateAlerter
 from elastalert.alerters.yzj import YzjAlerter
 from elastalert.alerters.zabbix import ZabbixAlerter
@@ -114,7 +116,7 @@ class RulesLoader(object):
         'debug': elastalert.alerters.debug.DebugAlerter,
         'command': elastalert.alerters.command.CommandAlerter,
         'sns': SnsAlerter,
-        'ms_teams': MsTeamsAlerter,
+        'sqs': SqsAlerter,
         'ms_power_automate': MsPowerAutomateAlerter,
         'slack': SlackAlerter,
         'mattermost': MattermostAlerter,
@@ -135,6 +137,7 @@ class RulesLoader(object):
         'discord': elastalert.alerters.discord.DiscordAlerter,
         'dingtalk': elastalert.alerters.dingtalk.DingTalkAlerter,
         'lark': elastalert.alerters.lark.LarkAlerter,
+        'line': elastalert.alerters.line.LineMessageAPIAlerter,
         'webex_webhook': elastalert.alerters.webex_webhook.WebexWebhookAlerter,
         'workwechat': elastalert.alerters.workwechat.WorkWechatAlerter,
         'chatwork': elastalert.alerters.chatwork.ChatworkAlerter,
@@ -355,6 +358,11 @@ class RulesLoader(object):
                 rule['opensearch_discover_to_timedelta'] = datetime.timedelta(**rule['opensearch_discover_to_timedelta'])
         except (KeyError, TypeError) as e:
             raise EAException('Invalid time format used: %s' % e)
+
+        # Must run before the defaults below copy the global max_query_size into the rule
+        esql_limit = rule.get('max_query_size', conf.get('esql_limit'))
+        if esql_limit:
+            rule['filter'] = esql.apply_limit(rule.get('filter', []), esql_limit)
 
         # Set defaults, copy defaults from config.yaml
         for key, val in list(self.base_config.items()):

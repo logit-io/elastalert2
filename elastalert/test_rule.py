@@ -211,7 +211,7 @@ class MockElastAlerter(object):
 
         terms = res['hits']['hits'][0]['_source']
 
-        is_eql = res.get('eql') == True
+        is_eql = res.get('eql') == True or res.get('esql') == True
 
         if not is_eql:
             # Get a count of all docs
@@ -444,11 +444,11 @@ class MockElastAlerter(object):
             'es_host': 'localhost',
             'es_port': 14900,
             'writeback_index': 'wb',
-            'max_query_size': 10000,
             'alert_time_limit': {'hours': 24},
             'old_query_limit': {'weeks': 1},
             'run_every': {'minutes': 5},
             'disable_rules_on_error': False,
+            'allow_queries_on_degraded_indices': False,
             'buffer_time': {'minutes': 45},
             'scroll_keepalive': '30s'
         }
